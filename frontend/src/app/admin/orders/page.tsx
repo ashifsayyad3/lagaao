@@ -24,9 +24,9 @@ export default function AdminOrdersPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [page, setPage] = useState(1);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<any>({
     queryKey: ['admin-orders', page, filterStatus],
-    queryFn: () => (api.get('/orders/admin/all', { params: { page, limit: 20, status: filterStatus || undefined } }) as Promise<any>).then((d: any) => d.data),
+    queryFn: () => api.get('/orders/admin/all', { params: { page, limit: 20, status: filterStatus || undefined } }).then((d: any) => d.data),
     keepPreviousData: true,
   } as any);
 

@@ -22,7 +22,20 @@ export class WishlistService {
         },
       },
     });
-    if (!wishlist) wishlist = await this.prisma.wishlist.create({ data: { userId }, include: { items: true } } as any);
+    if (!wishlist) {
+      await this.prisma.wishlist.create({ data: { userId } });
+      wishlist = await this.prisma.wishlist.findUnique({
+        where: { userId },
+        include: {
+          items: {
+            include: {
+              product: { include: { images: { where: { isPrimary: true }, take: 1 }, inventory: { select: { quantity: true } } } },
+            },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      });
+    }
     return wishlist;
   }
 

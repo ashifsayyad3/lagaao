@@ -22,9 +22,9 @@ export default function AdminProductsPage() {
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<any>({
     queryKey: ['admin-products', page, search, status],
-    queryFn: () => (api.get('/products', { params: { page, limit: 20, search, status: status || undefined, includeInactive: true } }) as Promise<any>).then((d: any) => d.data),
+    queryFn: () => api.get('/products', { params: { page, limit: 20, search, status: status || undefined, includeInactive: true } }).then((d: any) => d.data),
     keepPreviousData: true,
   } as any);
 

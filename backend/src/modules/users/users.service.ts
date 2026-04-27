@@ -20,7 +20,7 @@ export class UsersService {
   async updateProfile(id: string, dto: UpdateProfileDto) {
     const user = await this.prisma.user.update({
       where: { id },
-      data: dto,
+      data: dto as any,
     });
     const { passwordHash, refreshToken, resetToken, emailVerifyToken, phoneOtp, ...safe } = user;
     return safe;
@@ -34,7 +34,7 @@ export class UsersService {
     if (dto.isDefault) {
       await this.prisma.address.updateMany({ where: { userId }, data: { isDefault: false } });
     }
-    return this.prisma.address.create({ data: { ...dto, userId } });
+    return this.prisma.address.create({ data: { ...dto, userId } as any });
   }
 
   async updateAddress(userId: string, addressId: string, dto: Partial<CreateAddressDto>) {
@@ -43,7 +43,7 @@ export class UsersService {
     if (dto.isDefault) {
       await this.prisma.address.updateMany({ where: { userId }, data: { isDefault: false } });
     }
-    return this.prisma.address.update({ where: { id: addressId }, data: dto });
+    return this.prisma.address.update({ where: { id: addressId }, data: dto as any });
   }
 
   async deleteAddress(userId: string, addressId: string) {

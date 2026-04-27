@@ -24,11 +24,18 @@ export class CartService {
     });
 
     if (!cart) {
-      cart = await this.prisma.cart.create({
+      await this.prisma.cart.create({ data: { userId } });
+      cart = await this.prisma.cart.findUnique({
         where: { userId },
-        data: { userId },
-        include: { items: { include: { product: { include: { images: true, inventory: true } }, variant: true } } },
-      } as any);
+        include: {
+          items: {
+            include: {
+              product: { include: { images: { where: { isPrimary: true }, take: 1 }, inventory: { select: { quantity: true } } } },
+              variant: true,
+            },
+          },
+        },
+      });
     }
 
     const subtotal = cart.items.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);

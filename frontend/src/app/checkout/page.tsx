@@ -27,14 +27,14 @@ export default function CheckoutPage() {
     if (!isAuthenticated) router.push('/auth/login');
   }, [isAuthenticated, router]);
 
-  const { data: cartData } = useQuery({
+  const { data: cartData } = useQuery<any>({
     queryKey: ['cart'],
     queryFn: () => cartApi.get() as Promise<any>,
     select: (d: any) => d.data,
     enabled: isAuthenticated,
   });
 
-  const { data: addressData } = useQuery({
+  const { data: addressData } = useQuery<any>({
     queryKey: ['addresses'],
     queryFn: () => userApi.getAddresses() as Promise<any>,
     select: (d: any) => d.data,
