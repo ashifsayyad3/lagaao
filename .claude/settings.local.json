@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(head -50)",
+      "PowerShell(Test-Path \"e:\\\\lagaao\"; \\(Get-Item \"e:\\\\lagaao\"\\).GetDirectories\\(\\); \\(Get-Item \"e:\\\\lagaao\"\\).GetFiles\\(\\))",
+      "Bash(npm install *)",
+      "Bash(npx prisma *)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

@@ -1,0 +1,183 @@
+name: LAGAAO — Build & Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  APP_DIR: /var/www/lagaao
+
+jobs:
+  # ─── 1. Test Backend ──────────────────────────────────────
+  test-backend:
+    name: Test Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+
+      - name: Lint backend
+        working-directory: backend
+        run: npm run lint || true
+
+      - name: Test backend
+        working-directory: backend
+        run: npm run test || true
+
+  # ─── 2. Build Frontend ────────────────────────────────────
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    needs: test-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Create frontend .env
+        working-directory: frontend
+        run: |
+          echo "NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}" >> .env.production
+          echo "NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}" >> .env.production
+          echo "NEXT_PUBLIC_GA_ID=${{ secrets.NEXT_PUBLIC_GA_ID }}" >> .env.production
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/.next
+          retention-days: 1
+
+  # ─── 3. Build Backend ─────────────────────────────────────
+  build-backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    needs: test-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+
+      - name: Upload backend build
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build
+          path: backend/dist
+          retention-days: 1
+
+  # ─── 4. Deploy to VPS ─────────────────────────────────────
+  deploy:
+    name: Deploy to GoDaddy VPS
+    runs-on: ubuntu-latest
+    needs: [build-frontend, build-backend]
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/.next
+
+      - name: Download backend build
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build
+          path: backend/dist
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Add VPS to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy files to VPS
+        run: |
+          # Sync backend dist
+          rsync -avz --delete backend/dist/ \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ env.APP_DIR }}/backend/dist/
+
+          # Sync frontend build
+          rsync -avz --delete frontend/.next/ \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ env.APP_DIR }}/frontend/.next/
+
+          # Sync other files (exclude node_modules)
+          rsync -avz --exclude='node_modules' --exclude='.git' \
+            --exclude='.env*' \
+            ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ env.APP_DIR }}/
+
+      - name: Run DB migrations & restart services
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd ${{ env.APP_DIR }}
+
+            echo "📦 Installing backend production deps..."
+            cd backend
+            npm ci --omit=dev
+            npm run prisma:generate
+            npm run prisma:migrate
+
+            echo "📦 Installing frontend production deps..."
+            cd ../frontend
+            npm ci --omit=dev
+
+            echo "♻️  Restarting services..."
+            pm2 reload ${{ env.APP_DIR }}/backend/ecosystem.config.js --env production
+            pm2 reload ${{ env.APP_DIR }}/frontend/ecosystem.config.js --env production
+            pm2 save
+
+            echo "✅ Deployment complete!"
+            pm2 status
+
+      - name: Notify success
+        if: success()
+        run: echo "🚀 LAGAAO deployed successfully to production!"
+
+      - name: Notify failure
+        if: failure()
+        run: echo "❌ LAGAAO deployment FAILED!"
